@@ -150,6 +150,7 @@ func (c *Conn) clientHandshake(ctx context.Context) (err error) {
 	if c.config == nil {
 		c.config = fromConfig(defaultConfig())
 	}
+	c.setAlternativeRecordLayer()
 
 	// This may be a renegotiation handshake, in which case some fields
 	// need to be reset.

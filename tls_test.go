@@ -828,6 +828,7 @@ func TestCloneNonFuncFields(t *testing.T) {
 			f.Set(reflect.ValueOf(RenegotiateOnceAsClient))
 		case "mutex", "autoSessionTicketKeys", "sessionTicketKeys":
 			continue // these are unexported fields that are handled separately
+		case "AlternativeRecordLayer":
 		default:
 			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)
 		}
@@ -869,6 +870,34 @@ func TestExtraConfigCloneFuncField(t *testing.T) {
 	c2.ReceivedExtensions(0, nil)
 	if called != (1<<expectedCount)-1 {
 		t.Fatalf("expected %d calls but saw calls %b", expectedCount, called)
+	}
+}
+
+func TestExtraConfigCloneNonFuncFields(t *testing.T) {
+	var c1 ExtraConfig
+	v := reflect.ValueOf(&c1).Elem()
+
+	typ := v.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		f := v.Field(i)
+		// testing/quick can't handle functions or interfaces and so
+		// isn't used here.
+		switch fn := typ.Field(i).Name; fn {
+		case "GetExtensions", "ReceivedExtensions":
+			// DeepEqual can't compare functions. If you add a
+			// function field to this list, you must also change
+			// TestCloneFuncFields to ensure that the func field is
+			// cloned.
+		case "AlternativeRecordLayer":
+			f.Set(reflect.ValueOf(&recordLayer{}))
+		default:
+			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)
+		}
+	}
+
+	c2 := c1.Clone()
+	if !reflect.DeepEqual(&c1, c2) {
+		t.Errorf("clone failed to copy a field")
 	}
 }
 
