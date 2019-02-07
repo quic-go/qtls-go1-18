@@ -113,6 +113,13 @@ const (
 	scsvRenegotiation uint16 = 0x00ff
 )
 
+type EncryptionLevel uint8
+
+const (
+	EncryptionHandshake EncryptionLevel = iota
+	EncryptionApplication
+)
+
 // CurveID is a tls.CurveID
 type CurveID = tls.CurveID
 
@@ -710,6 +717,15 @@ type config struct {
 	autoSessionTicketKeys []ticketKey
 }
 
+// A RecordLayer handles encrypting and decrypting of TLS messages.
+type RecordLayer interface {
+	SetReadKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
+	SetWriteKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
+	ReadHandshakeMessage() ([]byte, error)
+	WriteRecord([]byte) (int, error)
+	SendAlert(uint8)
+}
+
 type ExtraConfig struct {
 	// GetExtensions, if not nil, is called before a message that allows
 	// sending of extensions is sent.
@@ -726,13 +742,17 @@ type ExtraConfig struct {
 	// client) and for the EncryptedExtensions message (sent by the server).
 	// Only valid for TLS 1.3.
 	ReceivedExtensions func(handshakeMessageType uint8, exts []Extension)
+
+	// AlternativeRecordLayer is used by QUIC
+	AlternativeRecordLayer RecordLayer
 }
 
 // Clone clones.
 func (c *ExtraConfig) Clone() *ExtraConfig {
 	return &ExtraConfig{
-		GetExtensions:      c.GetExtensions,
-		ReceivedExtensions: c.ReceivedExtensions,
+		GetExtensions:          c.GetExtensions,
+		ReceivedExtensions:     c.ReceivedExtensions,
+		AlternativeRecordLayer: c.AlternativeRecordLayer,
 	}
 }
 

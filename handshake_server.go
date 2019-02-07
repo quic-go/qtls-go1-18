@@ -40,6 +40,8 @@ type serverHandshakeState struct {
 
 // serverHandshake performs a TLS handshake as a server.
 func (c *Conn) serverHandshake(ctx context.Context) error {
+	c.setAlternativeRecordLayer()
+
 	clientHello, err := c.readClientHello(ctx)
 	if err != nil {
 		return err
