@@ -710,6 +710,32 @@ type config struct {
 	autoSessionTicketKeys []ticketKey
 }
 
+type ExtraConfig struct {
+	// GetExtensions, if not nil, is called before a message that allows
+	// sending of extensions is sent.
+	// Currently only implemented for the ClientHello message (for the client)
+	// and for the EncryptedExtensions message (for the server).
+	// Only valid for TLS 1.3.
+	GetExtensions func(handshakeMessageType uint8) []Extension
+
+	// ReceivedExtensions, if not nil, is called when a message that allows the
+	// inclusion of extensions is received.
+	// It is called with an empty slice of extensions, if the message didn't
+	// contain any extensions.
+	// Currently only implemented for the ClientHello message (sent by the
+	// client) and for the EncryptedExtensions message (sent by the server).
+	// Only valid for TLS 1.3.
+	ReceivedExtensions func(handshakeMessageType uint8, exts []Extension)
+}
+
+// Clone clones.
+func (c *ExtraConfig) Clone() *ExtraConfig {
+	return &ExtraConfig{
+		GetExtensions:      c.GetExtensions,
+		ReceivedExtensions: c.ReceivedExtensions,
+	}
+}
+
 const (
 	// ticketKeyNameLen is the number of bytes of identifier that is prepended to
 	// an encrypted session ticket in order to identify the key used to encrypt it.
