@@ -130,7 +130,7 @@ func runDynamicRecordSizingTest(t *testing.T, config *Config) {
 
 	serverConfig := config.Clone()
 	serverConfig.DynamicRecordSizingDisabled = false
-	tlsConn := Server(serverConn, serverConfig)
+	tlsConn := Server(serverConn, serverConfig, nil)
 
 	handshakeDone := make(chan struct{})
 	recordSizesChan := make(chan []int, 1)
@@ -142,7 +142,7 @@ func runDynamicRecordSizingTest(t *testing.T, config *Config) {
 		defer close(recordSizesChan)
 		defer clientConn.Close()
 
-		tlsConn := Client(clientConn, config)
+		tlsConn := Client(clientConn, config, nil)
 		if err := tlsConn.Handshake(); err != nil {
 			t.Errorf("Error from client handshake: %v", err)
 			return
@@ -279,7 +279,7 @@ func TestHairpinInClose(t *testing.T) {
 		GetCertificate: func(*ClientHelloInfo) (*Certificate, error) {
 			panic("unreachable")
 		},
-	})
+	}, nil)
 	conn.tlsConn = tlsConn
 
 	// This call should not deadlock.

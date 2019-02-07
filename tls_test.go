@@ -192,7 +192,7 @@ func TestDialTimeout(t *testing.T) {
 	}
 
 	var err error
-	if _, err = DialWithDialer(dialer, "tcp", addr, nil); err == nil {
+	if _, err = DialWithDialer(dialer, "tcp", addr, nil, nil); err == nil {
 		t.Fatal("DialWithTimeout completed successfully")
 	}
 
@@ -217,7 +217,7 @@ func TestDeadlineOnWrite(t *testing.T) {
 			srvCh <- nil
 			return
 		}
-		srv := Server(sconn, testConfig.Clone())
+		srv := Server(sconn, testConfig.Clone(), nil)
 		if err := srv.Handshake(); err != nil {
 			srvCh <- nil
 			return
@@ -227,7 +227,7 @@ func TestDeadlineOnWrite(t *testing.T) {
 
 	clientConfig := testConfig.Clone()
 	clientConfig.MaxVersion = VersionTLS12
-	conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+	conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -356,7 +356,7 @@ func testConnReadNonzeroAndEOF(t *testing.T, delay time.Duration) error {
 			return
 		}
 		serverConfig := testConfig.Clone()
-		srv := Server(sconn, serverConfig)
+		srv := Server(sconn, serverConfig, nil)
 		if err := srv.Handshake(); err != nil {
 			serr = fmt.Errorf("handshake: %v", err)
 			srvCh <- nil
@@ -369,7 +369,7 @@ func testConnReadNonzeroAndEOF(t *testing.T, delay time.Duration) error {
 	// In TLS 1.3, alerts are encrypted and disguised as application data, so
 	// the opportunistic peek won't work.
 	clientConfig.MaxVersion = VersionTLS12
-	conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+	conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +419,7 @@ func TestTLSUniqueMatches(t *testing.T) {
 			}
 			serverConfig := testConfig.Clone()
 			serverConfig.MaxVersion = VersionTLS12 // TLSUnique is not defined in TLS 1.3
-			srv := Server(sconn, serverConfig)
+			srv := Server(sconn, serverConfig, nil)
 			if err := srv.Handshake(); err != nil {
 				t.Error(err)
 				return
@@ -434,7 +434,7 @@ func TestTLSUniqueMatches(t *testing.T) {
 
 	clientConfig := testConfig.Clone()
 	clientConfig.ClientSessionCache = NewLRUClientSessionCache(1)
-	conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+	conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func TestTLSUniqueMatches(t *testing.T) {
 	}
 	conn.Close()
 
-	conn, err = Dial("tcp", ln.Addr().String(), clientConfig)
+	conn, err = Dial("tcp", ln.Addr().String(), clientConfig, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -476,7 +476,7 @@ func TestVerifyHostname(t *testing.T) {
 	// Skip this test in qtls.
 	return
 
-	c, err := Dial("tcp", "www.google.com:https", nil)
+	c, err := Dial("tcp", "www.google.com:https", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +487,7 @@ func TestVerifyHostname(t *testing.T) {
 		t.Fatalf("verify www.yahoo.com succeeded")
 	}
 
-	c, err = Dial("tcp", "www.google.com:https", &Config{InsecureSkipVerify: true})
+	c, err = Dial("tcp", "www.google.com:https", &Config{InsecureSkipVerify: true}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,7 +512,7 @@ func TestConnCloseBreakingWrite(t *testing.T) {
 			return
 		}
 		serverConfig := testConfig.Clone()
-		srv := Server(sconn, serverConfig)
+		srv := Server(sconn, serverConfig, nil)
 		if err := srv.Handshake(); err != nil {
 			serr = fmt.Errorf("handshake: %v", err)
 			srvCh <- nil
@@ -532,7 +532,7 @@ func TestConnCloseBreakingWrite(t *testing.T) {
 	}
 
 	clientConfig := testConfig.Clone()
-	tconn := Client(conn, clientConfig)
+	tconn := Client(conn, clientConfig, nil)
 	if err := tconn.Handshake(); err != nil {
 		t.Fatal(err)
 	}
@@ -589,7 +589,7 @@ func TestConnCloseWrite(t *testing.T) {
 		defer sconn.Close()
 
 		serverConfig := testConfig.Clone()
-		srv := Server(sconn, serverConfig)
+		srv := Server(sconn, serverConfig, nil)
 		if err := srv.Handshake(); err != nil {
 			return fmt.Errorf("handshake: %v", err)
 		}
@@ -619,7 +619,7 @@ func TestConnCloseWrite(t *testing.T) {
 		defer close(clientDoneChan)
 
 		clientConfig := testConfig.Clone()
-		conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+		conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 		if err != nil {
 			return err
 		}
@@ -673,7 +673,7 @@ func TestConnCloseWrite(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer netConn.Close()
-		conn := Client(netConn, testConfig.Clone())
+		conn := Client(netConn, testConfig.Clone(), nil)
 
 		if err := conn.CloseWrite(); err != errEarlyCloseWrite {
 			t.Errorf("CloseWrite error = %v; want errEarlyCloseWrite", err)
@@ -693,7 +693,7 @@ func TestWarningAlertFlood(t *testing.T) {
 		defer sconn.Close()
 
 		serverConfig := testConfig.Clone()
-		srv := Server(sconn, serverConfig)
+		srv := Server(sconn, serverConfig, nil)
 		if err := srv.Handshake(); err != nil {
 			return fmt.Errorf("handshake: %v", err)
 		}
@@ -716,7 +716,7 @@ func TestWarningAlertFlood(t *testing.T) {
 
 	clientConfig := testConfig.Clone()
 	clientConfig.MaxVersion = VersionTLS12 // there are no warning alerts in TLS 1.3
-	conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+	conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -916,7 +916,7 @@ func throughput(b *testing.B, version uint16, totalBytes int64, dynamicRecordSiz
 			serverConfig := testConfig.Clone()
 			serverConfig.CipherSuites = nil // the defaults may prefer faster ciphers
 			serverConfig.DynamicRecordSizingDisabled = dynamicRecordSizingDisabled
-			srv := Server(sconn, serverConfig)
+			srv := Server(sconn, serverConfig, nil)
 			if err := srv.Handshake(); err != nil {
 				panic(fmt.Errorf("handshake: %v", err))
 			}
@@ -935,7 +935,7 @@ func throughput(b *testing.B, version uint16, totalBytes int64, dynamicRecordSiz
 	buf := make([]byte, bufsize)
 	chunks := int(math.Ceil(float64(totalBytes) / float64(len(buf))))
 	for i := 0; i < N; i++ {
-		conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+		conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1013,7 +1013,7 @@ func latency(b *testing.B, version uint16, bps int, dynamicRecordSizingDisabled 
 			}
 			serverConfig := testConfig.Clone()
 			serverConfig.DynamicRecordSizingDisabled = dynamicRecordSizingDisabled
-			srv := Server(&slowConn{sconn, bps}, serverConfig)
+			srv := Server(&slowConn{sconn, bps}, serverConfig, nil)
 			if err := srv.Handshake(); err != nil {
 				panic(fmt.Errorf("handshake: %v", err))
 			}
@@ -1029,7 +1029,7 @@ func latency(b *testing.B, version uint16, bps int, dynamicRecordSizingDisabled 
 	peek := make([]byte, 1)
 
 	for i := 0; i < N; i++ {
-		conn, err := Dial("tcp", ln.Addr().String(), clientConfig)
+		conn, err := Dial("tcp", ln.Addr().String(), clientConfig, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
