@@ -139,6 +139,10 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, ecdheParameters, error) {
 		hello.keyShares = []keyShare{{group: curveID, data: params.PublicKey()}}
 	}
 
+	if hello.supportedVersions[0] == VersionTLS13 && c.extraConfig != nil && c.extraConfig.GetExtensions != nil {
+		hello.additionalExtensions = c.extraConfig.GetExtensions(typeClientHello)
+	}
+
 	return hello, params, nil
 }
 
