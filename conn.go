@@ -44,6 +44,8 @@ type Conn struct {
 	// handshakes counts the number of handshakes performed on the
 	// connection so far. If renegotiation is disabled then this is either
 	// zero or one.
+	extraConfig *ExtraConfig
+
 	handshakes       int
 	didResume        bool // whether this connection was a session resumption
 	cipherSuite      uint16

@@ -219,6 +219,11 @@ GroupSelection:
 	}
 
 	c.serverName = hs.clientHello.serverName
+
+	if c.extraConfig != nil && c.extraConfig.ReceivedExtensions != nil {
+		c.extraConfig.ReceivedExtensions(typeClientHello, hs.clientHello.additionalExtensions)
+	}
+
 	return nil
 }
 
