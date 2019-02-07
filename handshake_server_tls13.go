@@ -562,6 +562,9 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 	}
 	encryptedExtensions.alpnProtocol = selectedProto
 	c.clientProtocol = selectedProto
+	if hs.c.extraConfig != nil && hs.c.extraConfig.GetExtensions != nil {
+		encryptedExtensions.additionalExtensions = hs.c.extraConfig.GetExtensions(typeEncryptedExtensions)
+	}
 
 	hs.transcript.Write(encryptedExtensions.marshal())
 	if _, err := c.writeRecord(recordTypeHandshake, encryptedExtensions.marshal()); err != nil {
