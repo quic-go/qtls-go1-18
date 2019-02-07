@@ -15,6 +15,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha512"
+	"crypto/tls"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -107,12 +108,8 @@ const (
 	scsvRenegotiation uint16 = 0x00ff
 )
 
-// CurveID is the type of a TLS identifier for an elliptic curve. See
-// https://www.iana.org/assignments/tls-parameters/tls-parameters.xml#tls-parameters-8.
-//
-// In TLS 1.3, this type is called NamedGroup, but at this time this library
-// only supports Elliptic Curve based groups. See RFC 8446, Section 4.2.7.
-type CurveID uint16
+// CurveID is a tls.CurveID
+type CurveID = tls.CurveID
 
 const (
 	CurveP256 CurveID = 23
@@ -362,7 +359,7 @@ type ClientSessionCache interface {
 	Put(sessionKey string, cs *ClientSessionState)
 }
 
-//go:generate stringer -type=SignatureScheme,CurveID,ClientAuthType -output=common_string.go
+//go:generate stringer -type=SignatureScheme,ClientAuthType -output=common_string.go
 
 // SignatureScheme identifies a signature algorithm supported by TLS. See
 // RFC 8446, Section 4.2.3.
