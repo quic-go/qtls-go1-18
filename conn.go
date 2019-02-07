@@ -178,6 +178,8 @@ type halfConn struct {
 	nextMac    hash.Hash // next MAC algorithm
 
 	trafficSecret []byte // current TLS 1.3 traffic secret
+
+	setKeyCallback func(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte)
 }
 
 type permanentError struct {
@@ -220,6 +222,18 @@ func (hc *halfConn) changeCipherSpec() error {
 		hc.seq[i] = 0
 	}
 	return nil
+}
+
+func (hc *halfConn) exportKey(encLevel EncryptionLevel, suite *cipherSuiteTLS13, trafficSecret []byte) {
+	if hc.setKeyCallback != nil {
+		s := &CipherSuiteTLS13{
+			ID:     suite.id,
+			KeyLen: suite.keyLen,
+			Hash:   suite.hash,
+			AEAD:   func(key, fixedNonce []byte) cipher.AEAD { return suite.aead(key, fixedNonce) },
+		}
+		hc.setKeyCallback(encLevel, s, trafficSecret)
+	}
 }
 
 func (hc *halfConn) setTrafficSecret(suite *cipherSuiteTLS13, secret []byte) {
@@ -454,6 +468,13 @@ func (hc *halfConn) decrypt(record []byte) ([]byte, recordType, error) {
 
 	hc.incSeq()
 	return plaintext, typ, nil
+}
+
+func (c *Conn) setAlternativeRecordLayer() {
+	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
+		c.in.setKeyCallback = c.extraConfig.AlternativeRecordLayer.SetReadKey
+		c.out.setKeyCallback = c.extraConfig.AlternativeRecordLayer.SetWriteKey
+	}
 }
 
 // sliceForAppend extends the input slice by n bytes. head is the full extended
@@ -831,6 +852,11 @@ func (c *Conn) sendAlertLocked(err alert) error {
 
 // sendAlert sends a TLS alert message.
 func (c *Conn) sendAlert(err alert) error {
+	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
+		c.extraConfig.AlternativeRecordLayer.SendAlert(uint8(err))
+		return &net.OpError{Op: "local error", Err: err}
+	}
+
 	c.out.Lock()
 	defer c.out.Unlock()
 	return c.sendAlertLocked(err)
@@ -1006,6 +1032,13 @@ func (c *Conn) writeRecordLocked(typ recordType, data []byte) (int, error) {
 // writeRecord writes a TLS record with the given type and payload to the
 // connection and updates the record layer state.
 func (c *Conn) writeRecord(typ recordType, data []byte) (int, error) {
+	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
+		if typ == recordTypeChangeCipherSpec {
+			return len(data), nil
+		}
+		return c.extraConfig.AlternativeRecordLayer.WriteRecord(data)
+	}
+
 	c.out.Lock()
 	defer c.out.Unlock()
 
@@ -1015,24 +1048,33 @@ func (c *Conn) writeRecord(typ recordType, data []byte) (int, error) {
 // readHandshake reads the next handshake message from
 // the record layer.
 func (c *Conn) readHandshake() (any, error) {
-	for c.hand.Len() < 4 {
-		if err := c.readRecord(); err != nil {
+	var data []byte
+	if c.extraConfig != nil && c.extraConfig.AlternativeRecordLayer != nil {
+		var err error
+		data, err = c.extraConfig.AlternativeRecordLayer.ReadHandshakeMessage()
+		if err != nil {
 			return nil, err
 		}
-	}
+	} else {
+		for c.hand.Len() < 4 {
+			if err := c.readRecord(); err != nil {
+				return nil, err
+			}
+		}
 
-	data := c.hand.Bytes()
-	n := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
-	if n > maxHandshake {
-		c.sendAlertLocked(alertInternalError)
-		return nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
-	}
-	for c.hand.Len() < 4+n {
-		if err := c.readRecord(); err != nil {
-			return nil, err
+		data = c.hand.Bytes()
+		n := int(data[1])<<16 | int(data[2])<<8 | int(data[3])
+		if n > maxHandshake {
+			c.sendAlertLocked(alertInternalError)
+			return nil, c.in.setErrorLocked(fmt.Errorf("tls: handshake message of length %d bytes exceeds maximum of %d bytes", n, maxHandshake))
 		}
+		for c.hand.Len() < 4+n {
+			if err := c.readRecord(); err != nil {
+				return nil, err
+			}
+		}
+		data = c.hand.Next(4 + n)
 	}
-	data = c.hand.Next(4 + n)
 	var m handshakeMessage
 	switch data[0] {
 	case typeHelloRequest:
