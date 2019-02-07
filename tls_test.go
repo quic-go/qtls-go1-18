@@ -850,6 +850,28 @@ func TestCloneNilConfig(t *testing.T) {
 	}
 }
 
+func TestExtraConfigCloneFuncField(t *testing.T) {
+	const expectedCount = 2
+	called := 0
+
+	c1 := ExtraConfig{
+		GetExtensions: func(handshakeMessageType uint8) []Extension {
+			called |= 1 << 0
+			return nil
+		},
+		ReceivedExtensions: func(handshakeMessageType uint8, exts []Extension) {
+			called |= 1 << 1
+		},
+	}
+
+	c2 := c1.Clone()
+	c2.GetExtensions(0)
+	c2.ReceivedExtensions(0, nil)
+	if called != (1<<expectedCount)-1 {
+		t.Fatalf("expected %d calls but saw calls %b", expectedCount, called)
+	}
+}
+
 // changeImplConn is a net.Conn which can change its Write and Close
 // methods.
 type changeImplConn struct {
