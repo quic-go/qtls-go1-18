@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package tls
+package qtls
 
 import (
 	"bytes"
@@ -18,7 +18,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"internal/godebug"
 	"io"
 	"net"
 	"strings"
@@ -975,7 +974,8 @@ var supportedVersions = []uint16{
 }
 
 // debugEnableTLS10 enables TLS 1.0. See issue 45428.
-var debugEnableTLS10 = godebug.Get("tls10default") == "1"
+// We don't care about TLS1.0 in qtls. Always disable it.
+var debugEnableTLS10 = false
 
 // roleClient and roleServer are meant to call supportedVersions and parents
 // with more readability at the callsite.
