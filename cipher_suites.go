@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package tls
+package qtls
 
 import (
 	"crypto"
@@ -15,10 +15,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
-	"internal/cpu"
 	"runtime"
 
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/sys/cpu"
 )
 
 // CipherSuite is a TLS cipher suite. Note that most functions in this package
