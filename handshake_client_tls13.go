@@ -394,6 +394,9 @@ func (hs *clientHandshakeStateTLS13) readServerParameters() error {
 		c.sendAlert(alertUnexpectedMessage)
 		return unexpectedMessageError(encryptedExtensions, msg)
 	}
+	if hs.c.extraConfig != nil && hs.c.extraConfig.ReceivedExtensions != nil {
+		hs.c.extraConfig.ReceivedExtensions(typeEncryptedExtensions, encryptedExtensions.additionalExtensions)
+	}
 	hs.transcript.Write(encryptedExtensions.marshal())
 
 	if err := checkALPN(hs.hello.alpnProtocols, encryptedExtensions.alpnProtocol); err != nil {
