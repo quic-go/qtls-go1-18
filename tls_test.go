@@ -814,7 +814,8 @@ func TestCloneNonFuncFields(t *testing.T) {
 			f.Set(reflect.ValueOf("b"))
 		case "ClientAuth":
 			f.Set(reflect.ValueOf(VerifyClientCertIfGiven))
-		case "InsecureSkipVerify", "SessionTicketsDisabled", "DynamicRecordSizingDisabled", "PreferServerCipherSuites":
+		case "InsecureSkipVerify", "SessionTicketsDisabled", "DynamicRecordSizingDisabled", "PreferServerCipherSuites",
+			"EnforceNextProtoSelection":
 			f.Set(reflect.ValueOf(true))
 		case "MinVersion", "MaxVersion":
 			f.Set(reflect.ValueOf(uint16(VersionTLS12)))
@@ -890,6 +891,8 @@ func TestExtraConfigCloneNonFuncFields(t *testing.T) {
 			// cloned.
 		case "AlternativeRecordLayer":
 			f.Set(reflect.ValueOf(&recordLayer{}))
+		case "EnforceNextProtoSelection":
+			f.Set(reflect.ValueOf(true))
 		default:
 			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)
 		}
