@@ -930,6 +930,47 @@ func TestHandshakeServerALPN(t *testing.T) {
 	runServerTestTLS13(t, test)
 }
 
+func TestHandshakeServerEnforceALPN(t *testing.T) {
+	run := func(t *testing.T, serverProtos, clientProtos []string, expectedSuccess bool) {
+		clientConn, serverConn := localPipe(t)
+		serverConfig := testConfig.Clone()
+		serverConfig.NextProtos = serverProtos
+		client := Client(clientConn, serverConfig, nil)
+
+		cErrChan := make(chan error)
+		go func() {
+			cErrChan <- client.Handshake()
+		}()
+
+		config := testConfig.Clone()
+		config.NextProtos = clientProtos
+		extraConf := &ExtraConfig{EnforceNextProtoSelection: true}
+
+		server := Server(serverConn, config, extraConf)
+		sErr := server.Handshake()
+		cErr := <-cErrChan
+		if expectedSuccess {
+			if sErr != nil || cErr != nil {
+				t.Fatalf("Expected ALPN negotiation to succeed. Client error: %v, server error: %v", cErr, sErr)
+			}
+		} else {
+			if sErr == nil || sErr.Error() != "tls: client requested unsupported application protocols ([proto1 proto2])" {
+				t.Fatalf("Expected APLN negotiation to fail, got %v", sErr)
+			}
+			if cErr == nil || !strings.Contains(cErr.Error(), "no application protocol") {
+				t.Fatalf("Expect 'no_application_protocol' error, got %v", cErr)
+			}
+		}
+	}
+
+	t.Run("ALPN failure", func(t *testing.T) {
+		run(t, []string{"proto1", "proto2"}, []string{"proto3"}, false)
+	})
+	t.Run("ALPN negotiation success", func(t *testing.T) {
+		run(t, []string{"proto1", "proto2"}, []string{"proto1"}, true)
+	})
+}
+
 func TestHandshakeServerALPNNoMatch(t *testing.T) {
 	config := testConfig.Clone()
 	config.NextProtos = []string{"proto3"}
