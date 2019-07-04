@@ -208,7 +208,9 @@ func (c *Conn) getSessionTicketMsg() (*newSessionTicketMsgTLS13, error) {
 		return nil, err
 	}
 	m.lifetime = uint32(maxSessionTicketLifetime / time.Second)
-
+	if c.extraConfig != nil {
+		m.maxEarlyData = c.extraConfig.MaxEarlyData
+	}
 	return m, nil
 }
 
