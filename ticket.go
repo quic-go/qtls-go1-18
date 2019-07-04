@@ -223,6 +223,9 @@ func (c *Conn) getSessionTicketMsg() (*newSessionTicketMsgTLS13, error) {
 	// ticket_nonce, which must be unique per connection, is always left at
 	// zero because we only ever send one ticket per connection.
 
+	if c.extraConfig != nil {
+		m.maxEarlyData = c.extraConfig.MaxEarlyData
+	}
 	return m, nil
 }
 

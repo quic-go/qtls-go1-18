@@ -829,6 +829,8 @@ func TestCloneNonFuncFields(t *testing.T) {
 			f.Set(reflect.ValueOf(RenegotiateOnceAsClient))
 		case "mutex", "autoSessionTicketKeys", "sessionTicketKeys":
 			continue // these are unexported fields that are handled separately
+		case "MaxEarlyData":
+			f.Set(reflect.ValueOf(uint32(1337)))
 		case "AlternativeRecordLayer":
 		default:
 			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)
@@ -893,6 +895,8 @@ func TestExtraConfigCloneNonFuncFields(t *testing.T) {
 			f.Set(reflect.ValueOf(&recordLayer{}))
 		case "EnforceNextProtoSelection":
 			f.Set(reflect.ValueOf(true))
+		case "MaxEarlyData":
+			f.Set(reflect.ValueOf(uint32(42)))
 		default:
 			t.Errorf("all fields must be accounted for, but saw unknown field %q", fn)
 		}
