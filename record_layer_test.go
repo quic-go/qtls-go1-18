@@ -44,7 +44,9 @@ func (r *recordLayerWithKeys) ReadHandshakeMessage() ([]byte, error) { return <-
 func (r *recordLayerWithKeys) WriteRecord(b []byte) (int, error)     { r.out <- b; return len(b), nil }
 func (r *recordLayerWithKeys) SendAlert(uint8)                       {}
 
-type unusedConn struct{}
+type unusedConn struct {
+	remoteAddr net.Addr
+}
 
 var _ net.Conn = &unusedConn{}
 
@@ -52,7 +54,7 @@ func (unusedConn) Read([]byte) (int, error)         { panic("unexpected call to 
 func (unusedConn) Write([]byte) (int, error)        { panic("unexpected call to Write()") }
 func (unusedConn) Close() error                     { return nil }
 func (unusedConn) LocalAddr() net.Addr              { return &net.TCPAddr{} }
-func (unusedConn) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (c *unusedConn) RemoteAddr() net.Addr          { return c.remoteAddr }
 func (unusedConn) SetDeadline(time.Time) error      { return nil }
 func (unusedConn) SetReadDeadline(time.Time) error  { return nil }
 func (unusedConn) SetWriteDeadline(time.Time) error { return nil }
@@ -337,4 +339,80 @@ func TestRejectConfigWithOldMaxVersion(t *testing.T) {
 			t.Fatal("expected an internal error alert to be sent")
 		}
 	})
+}
+
+func TestForbiddenZeroRTT(t *testing.T) {
+	// run the first handshake to get a session ticket
+	clientConn, serverConn := localPipe(t)
+	errChan := make(chan error, 1)
+	go func() {
+		tlsConn := Server(serverConn, testConfig.Clone(), nil)
+		defer tlsConn.Close()
+		err := tlsConn.Handshake()
+		errChan <- err
+		if err != nil {
+			return
+		}
+		tlsConn.Write([]byte{0})
+	}()
+
+	clientConfig := testConfig.Clone()
+	clientConfig.ClientSessionCache = NewLRUClientSessionCache(10)
+	tlsConn := Client(clientConn, clientConfig, nil)
+	if err := tlsConn.Handshake(); err != nil {
+		t.Fatalf("first handshake failed: %s", err)
+	}
+	tlsConn.Read([]byte{0}) // make sure to read the session ticket
+	tlsConn.Close()
+	if err := <-errChan; err != nil {
+		t.Fatalf("first handshake failed: %s", err)
+	}
+
+	sIn := make(chan []byte, 10)
+	cIn := make(chan []byte, 10)
+	cOut := make(chan []byte, 10)
+
+	go func() {
+		for {
+			b, ok := <-cOut
+			if !ok {
+				return
+			}
+			if b[0] == typeClientHello {
+				msg := &clientHelloMsg{}
+				if ok := msg.unmarshal(b); !ok {
+					panic("unmarshaling failed")
+				}
+				msg.earlyData = true
+				msg.raw = nil
+				b = msg.marshal()
+			}
+			sIn <- b
+		}
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		extraConf := &ExtraConfig{AlternativeRecordLayer: &recordLayer{in: cIn, out: cOut}}
+		Client(&unusedConn{remoteAddr: clientConn.RemoteAddr()}, clientConfig, extraConf).Handshake()
+	}()
+
+	config := testConfig.Clone()
+	config.MinVersion = VersionTLS13
+	serverRecordLayer := &recordLayer{in: sIn, out: cIn}
+	extraConf := &ExtraConfig{AlternativeRecordLayer: serverRecordLayer}
+	tlsConn = Server(&unusedConn{}, config, extraConf)
+	err := tlsConn.Handshake()
+	if err == nil {
+		t.Fatal("expected handshake to fail")
+	}
+	if err.Error() != "tls: client sent unexpected early data" {
+		t.Fatalf("expected early data error")
+	}
+	if serverRecordLayer.alertSent != alertUnsupportedExtension {
+		t.Fatal("expected an unsupported extension alert to be sent")
+	}
+	cIn <- []byte{0} // make the client handshake error
+	<-done
 }
