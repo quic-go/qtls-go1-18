@@ -815,7 +815,7 @@ func TestCloneNonFuncFields(t *testing.T) {
 		case "ClientAuth":
 			f.Set(reflect.ValueOf(VerifyClientCertIfGiven))
 		case "InsecureSkipVerify", "SessionTicketsDisabled", "DynamicRecordSizingDisabled", "PreferServerCipherSuites",
-			"EnforceNextProtoSelection":
+			"EnforceNextProtoSelection", "Enable0RTT":
 			f.Set(reflect.ValueOf(true))
 		case "MinVersion", "MaxVersion":
 			f.Set(reflect.ValueOf(uint16(VersionTLS12)))
@@ -893,7 +893,7 @@ func TestExtraConfigCloneNonFuncFields(t *testing.T) {
 			// cloned.
 		case "AlternativeRecordLayer":
 			f.Set(reflect.ValueOf(&recordLayer{}))
-		case "EnforceNextProtoSelection":
+		case "EnforceNextProtoSelection", "Enable0RTT":
 			f.Set(reflect.ValueOf(true))
 		case "MaxEarlyData":
 			f.Set(reflect.ValueOf(uint32(42)))
