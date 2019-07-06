@@ -855,7 +855,7 @@ func TestCloneNilConfig(t *testing.T) {
 }
 
 func TestExtraConfigCloneFuncField(t *testing.T) {
-	const expectedCount = 2
+	const expectedCount = 3
 	called := 0
 
 	c1 := ExtraConfig{
@@ -866,11 +866,16 @@ func TestExtraConfigCloneFuncField(t *testing.T) {
 		ReceivedExtensions: func(handshakeMessageType uint8, exts []Extension) {
 			called |= 1 << 1
 		},
+		Accept0RTT: func([]byte) bool {
+			called |= 1 << 2
+			return true
+		},
 	}
 
 	c2 := c1.Clone()
 	c2.GetExtensions(0)
 	c2.ReceivedExtensions(0, nil)
+	c2.Accept0RTT(nil)
 	if called != (1<<expectedCount)-1 {
 		t.Fatalf("expected %d calls but saw calls %b", expectedCount, called)
 	}
@@ -886,7 +891,7 @@ func TestExtraConfigCloneNonFuncFields(t *testing.T) {
 		// testing/quick can't handle functions or interfaces and so
 		// isn't used here.
 		switch fn := typ.Field(i).Name; fn {
-		case "GetExtensions", "ReceivedExtensions":
+		case "GetExtensions", "ReceivedExtensions", "Accept0RTT":
 			// DeepEqual can't compare functions. If you add a
 			// function field to this list, you must also change
 			// TestCloneFuncFields to ensure that the func field is
