@@ -261,6 +261,9 @@ func (hs *clientHandshakeStateTLS13) processHelloRetryRequest() error {
 		}
 	}
 
+	if hs.hello.earlyData && c.extraConfig != nil && c.extraConfig.Rejected0RTT != nil {
+		c.extraConfig.Rejected0RTT()
+	}
 	hs.hello.earlyData = false // disable 0-RTT
 
 	hs.transcript.Write(hs.hello.marshal())
@@ -398,6 +401,10 @@ func (hs *clientHandshakeStateTLS13) readServerParameters() error {
 	if !ok {
 		c.sendAlert(alertUnexpectedMessage)
 		return unexpectedMessageError(encryptedExtensions, msg)
+	}
+	// Notify the caller if 0-RTT was rejected.
+	if !encryptedExtensions.earlyData && hs.hello.earlyData && c.extraConfig != nil && c.extraConfig.Rejected0RTT != nil {
+		c.extraConfig.Rejected0RTT()
 	}
 	if hs.c.extraConfig != nil && hs.c.extraConfig.ReceivedExtensions != nil {
 		hs.c.extraConfig.ReceivedExtensions(typeEncryptedExtensions, encryptedExtensions.additionalExtensions)
