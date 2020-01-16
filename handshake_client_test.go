@@ -129,6 +129,8 @@ type clientTest struct {
 	args []string
 	// config, if not nil, contains a custom Config to use for this test.
 	config *Config
+	// extraConfig contains a custom ExtraConfig to use for this test.
+	extraConfig *ExtraConfig
 	// cert, if not empty, contains a DER-encoded certificate for the
 	// reference server.
 	cert []byte
@@ -312,7 +314,7 @@ func (test *clientTest) run(t *testing.T, write bool) {
 		if config == nil {
 			config = testConfig
 		}
-		client := Client(clientConn, config, nil)
+		client := Client(clientConn, config, test.extraConfig)
 		defer client.Close()
 
 		if _, err := client.Write([]byte("hello\n")); err != nil {
@@ -656,9 +658,10 @@ func TestHandshakeClientHelloRetryRequest(t *testing.T) {
 	config.CurvePreferences = []CurveID{X25519, CurveP256}
 
 	test := &clientTest{
-		name:   "HelloRetryRequest",
-		args:   []string{"-cipher", "ECDHE-RSA-AES128-GCM-SHA256", "-curves", "P-256"},
-		config: config,
+		name:        "HelloRetryRequest",
+		args:        []string{"-cipher", "ECDHE-RSA-AES128-GCM-SHA256", "-curves", "P-256"},
+		config:      config,
+		extraConfig: &ExtraConfig{Rejected0RTT: func() { t.Error("didn't expect 0-RTT rejection") }},
 	}
 
 	runClientTestTLS13(t, test)
