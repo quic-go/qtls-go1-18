@@ -290,6 +290,12 @@ type connectionState struct {
 	ekm func(label string, context []byte, length int) ([]byte, error)
 }
 
+type ConnectionStateWith0RTT struct {
+	ConnectionState
+
+	Used0RTT bool // true if 0-RTT was both offered and accepted
+}
+
 // ClientAuthType is tls.ClientAuthType
 type ClientAuthType = tls.ClientAuthType
 
