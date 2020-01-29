@@ -698,3 +698,110 @@ func TestZeroRTTRejection(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroRTTALPN(t *testing.T) {
+	run := func(t *testing.T, proto1, proto2 string, expectReject bool) {
+		raddr := &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 1234}
+		sIn := make(chan []byte, 10)
+		sOut := make(chan []byte, 10)
+
+		// do a first handshake and encode a "foobar" into the session ticket
+		errChan := make(chan error, 1)
+		go func() {
+			serverConf := testConfig.Clone()
+			serverConf.NextProtos = []string{proto1}
+			extraConf := &ExtraConfig{
+				AlternativeRecordLayer: &recordLayer{in: sIn, out: sOut},
+				MaxEarlyData:           1,
+			}
+			server := Server(&unusedConn{remoteAddr: raddr}, serverConf, extraConf)
+			defer server.Close()
+			err := server.Handshake()
+			if err != nil {
+				errChan <- err
+				return
+			}
+			st, err := server.GetSessionTicket(nil)
+			if err != nil {
+				errChan <- err
+				return
+			}
+			sOut <- st
+			errChan <- nil
+		}()
+
+		clientConf := testConfig.Clone()
+		clientConf.NextProtos = []string{proto1}
+		clientConf.ClientSessionCache = NewLRUClientSessionCache(10)
+		extraConf := &ExtraConfig{AlternativeRecordLayer: &recordLayer{in: sOut, out: sIn}}
+		client := Client(&unusedConn{remoteAddr: raddr}, clientConf, extraConf)
+		if err := client.Handshake(); err != nil {
+			t.Fatalf("first handshake failed %s", err)
+		}
+		if err := <-errChan; err != nil {
+			t.Fatalf("first handshake failed %s", err)
+		}
+		if err := client.HandlePostHandshakeMessage(); err != nil {
+			t.Fatalf("handling the session ticket failed: %s", err)
+		}
+		client.Close()
+
+		// now dial the second connection
+		errChan = make(chan error, 1)
+		connStateChan := make(chan ConnectionStateWith0RTT, 1)
+		go func() {
+			serverConf := testConfig.Clone()
+			serverConf.NextProtos = []string{proto2}
+			extraConf := &ExtraConfig{
+				AlternativeRecordLayer: &recordLayer{in: sIn, out: sOut},
+				Accept0RTT:             func([]byte) bool { return true },
+				MaxEarlyData:           1,
+			}
+			server := Server(&unusedConn{remoteAddr: raddr}, serverConf, extraConf)
+			defer server.Close()
+			errChan <- server.Handshake()
+			connStateChan <- server.ConnectionStateWith0RTT()
+		}()
+
+		clientConf.NextProtos = []string{proto2}
+		extraConf.Enable0RTT = true
+		var rejected bool
+		extraConf.Rejected0RTT = func() { rejected = true }
+		client = Client(&unusedConn{remoteAddr: raddr}, clientConf, extraConf)
+		if err := client.Handshake(); err != nil {
+			t.Fatalf("second handshake failed %s", err)
+		}
+		defer client.Close()
+		if err := <-errChan; err != nil {
+			t.Fatalf("second handshake failed %s", err)
+		}
+		if expectReject {
+			if !rejected {
+				t.Fatal("expected 0-RTT to be rejected")
+			}
+			if client.ConnectionStateWith0RTT().Used0RTT {
+				t.Fatal("expected 0-RTT to be rejected")
+			}
+			if (<-connStateChan).Used0RTT {
+				t.Fatal("expected 0-RTT to be rejected")
+			}
+		} else {
+			if rejected {
+				t.Fatal("didn't expect 0-RTT to be rejected")
+			}
+			if !client.ConnectionStateWith0RTT().Used0RTT {
+				t.Fatal("didn't expect 0-RTT to be rejected")
+			}
+			if !(<-connStateChan).Used0RTT {
+				t.Fatal("didn't expect 0-RTT to be rejected")
+			}
+		}
+	}
+
+	t.Run("with the same alpn", func(t *testing.T) {
+		run(t, "proto1", "proto1", false)
+	})
+	t.Run("with different alpn", func(t *testing.T) {
+		run(t, "proto1", "proto2", true)
+	})
+}

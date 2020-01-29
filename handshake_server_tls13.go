@@ -27,6 +27,7 @@ type serverHandshakeStateTLS13 struct {
 	ctx                 context.Context
 	clientHello         *clientHelloMsg
 	hello               *serverHelloMsg
+	alpnNegotiationErr  error
 	encryptedExtensions *encryptedExtensionsMsg
 	sentDummyCCS        bool
 	usingPSK            bool
@@ -227,6 +228,13 @@ GroupSelection:
 		c.extraConfig.ReceivedExtensions(typeClientHello, hs.clientHello.additionalExtensions)
 	}
 
+	selectedProto, err := negotiateALPN(c.config.NextProtos, hs.clientHello.alpnProtocols)
+	if err != nil {
+		hs.alpnNegotiationErr = err
+	}
+	hs.encryptedExtensions.alpnProtocol = selectedProto
+	c.clientProtocol = selectedProto
+
 	return nil
 }
 
@@ -276,7 +284,8 @@ func (hs *serverHandshakeStateTLS13) checkForResumption() error {
 				return errors.New("tls: client sent unexpected early data")
 			}
 
-			if c.extraConfig != nil && c.extraConfig.MaxEarlyData > 0 &&
+			if hs.alpnNegotiationErr == nil && sessionState.alpn == c.clientProtocol &&
+				c.extraConfig != nil && c.extraConfig.MaxEarlyData > 0 &&
 				c.extraConfig.Accept0RTT != nil && c.extraConfig.Accept0RTT(sessionState.appData) {
 				hs.encryptedExtensions.earlyData = true
 				c.used0RTT = true
@@ -588,13 +597,10 @@ func (hs *serverHandshakeStateTLS13) sendServerParameters() error {
 		return err
 	}
 
-	selectedProto, err := negotiateALPN(c.config.NextProtos, hs.clientHello.alpnProtocols)
-	if err != nil {
+	if hs.alpnNegotiationErr != nil {
 		c.sendAlert(alertNoApplicationProtocol)
-		return err
+		return hs.alpnNegotiationErr
 	}
-	hs.encryptedExtensions.alpnProtocol = selectedProto
-	c.clientProtocol = selectedProto
 	if hs.c.extraConfig != nil && hs.c.extraConfig.GetExtensions != nil {
 		hs.encryptedExtensions.additionalExtensions = hs.c.extraConfig.GetExtensions(typeEncryptedExtensions)
 	}
