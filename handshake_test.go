@@ -383,12 +383,16 @@ func runMain(m *testing.M) int {
 	return m.Run()
 }
 
-func testHandshake(t *testing.T, clientConfig, serverConfig *Config) (serverState, clientState ConnectionState, err error) {
+func testHandshake(t *testing.T, clientConfig, serverConfig *Config) (serverState, clientState ConnectionStateWith0RTT, err error) {
+	return testHandshakeWithExtraConfig(t, clientConfig, nil, serverConfig, nil)
+}
+
+func testHandshakeWithExtraConfig(t *testing.T, clientConfig *Config, clientExtraConfig *ExtraConfig, serverConfig *Config, serverExtraConfig *ExtraConfig) (serverState, clientState ConnectionStateWith0RTT, err error) {
 	const sentinel = "SENTINEL\n"
 	c, s := localPipe(t)
 	errChan := make(chan error)
 	go func() {
-		cli := Client(c, clientConfig, nil)
+		cli := Client(c, clientConfig, clientExtraConfig)
 		err := cli.Handshake()
 		if err != nil {
 			errChan <- fmt.Errorf("client: %v", err)
@@ -396,7 +400,7 @@ func testHandshake(t *testing.T, clientConfig, serverConfig *Config) (serverStat
 			return
 		}
 		defer cli.Close()
-		clientState = cli.ConnectionState()
+		clientState = cli.ConnectionStateWith0RTT()
 		buf, err := io.ReadAll(cli)
 		if err != nil {
 			t.Errorf("failed to call cli.Read: %v", err)
@@ -406,10 +410,10 @@ func testHandshake(t *testing.T, clientConfig, serverConfig *Config) (serverStat
 		}
 		errChan <- nil
 	}()
-	server := Server(s, serverConfig, nil)
+	server := Server(s, serverConfig, serverExtraConfig)
 	err = server.Handshake()
 	if err == nil {
-		serverState = server.ConnectionState()
+		serverState = server.ConnectionStateWith0RTT()
 		if _, err := io.WriteString(server, sentinel); err != nil {
 			t.Errorf("failed to call server.Write: %v", err)
 		}
