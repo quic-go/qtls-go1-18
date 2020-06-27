@@ -874,12 +874,14 @@ func TestClientKeyUpdate(t *testing.T) {
 }
 
 func TestResumption(t *testing.T) {
-	t.Run("TLSv12", func(t *testing.T) { testResumption(t, VersionTLS12) })
-	t.Run("TLSv13", func(t *testing.T) { testResumption(t, VersionTLS13) })
-	t.Run("TLSv13 with 0-RTT", testResumption0RTT)
+	t.Run("TLSv12", func(t *testing.T) { testResumption(t, VersionTLS12, false) })
+	t.Run("TLSv13", func(t *testing.T) { testResumption(t, VersionTLS13, false) })
+	t.Run("TLSv13, saving app data", func(t *testing.T) { testResumption(t, VersionTLS13, true) })
+	t.Run("TLSv13, with 0-RTT", func(t *testing.T) { testResumption0RTT(t, false) })
+	t.Run("TLSv13, with 0-RTT, saving app data", func(t *testing.T) { testResumption0RTT(t, true) })
 }
 
-func testResumption(t *testing.T, version uint16) {
+func testResumption(t *testing.T, version uint16, saveAppData bool) {
 	if testing.Short() {
 		t.Skip("skipping in -short mode")
 	}
@@ -897,6 +899,7 @@ func testResumption(t *testing.T, version uint16) {
 	rootCAs := x509.NewCertPool()
 	rootCAs.AddCert(issuer)
 
+	var restoredAppData []byte
 	clientConfig := &Config{
 		MaxVersion:         version,
 		CipherSuites:       []uint16{TLS_RSA_WITH_RC4_128_SHA},
@@ -904,9 +907,14 @@ func testResumption(t *testing.T, version uint16) {
 		RootCAs:            rootCAs,
 		ServerName:         "example.golang",
 	}
+	clientExtraConfig := &ExtraConfig{}
+	if saveAppData {
+		clientExtraConfig.GetAppDataForSessionState = func() []byte { return []byte("foobar") }
+		clientExtraConfig.SetAppDataFromSessionState = func(data []byte) { restoredAppData = data }
+	}
 
 	testResumeState := func(test string, didResume bool) {
-		_, hs, err := testHandshake(t, clientConfig, serverConfig)
+		_, hs, err := testHandshakeWithExtraConfig(t, clientConfig, clientExtraConfig, serverConfig, nil)
 		if err != nil {
 			t.Fatalf("%s: handshake failed: %s", test, err)
 		}
@@ -918,6 +926,12 @@ func testResumption(t *testing.T, version uint16) {
 		}
 		if got, want := hs.ServerName, clientConfig.ServerName; got != want {
 			t.Errorf("%s: server name %s, want %s", test, got, want)
+		}
+		if didResume && saveAppData {
+			if !bytes.Equal(restoredAppData, []byte("foobar")) {
+				t.Fatalf("Expected to restore app data saved with the session state. Got: %#v", restoredAppData)
+			}
+			restoredAppData = nil
 		}
 	}
 
@@ -1057,7 +1071,7 @@ func testResumption(t *testing.T, version uint16) {
 	testResumeState("WithoutSessionCache", false)
 }
 
-func testResumption0RTT(t *testing.T) {
+func testResumption0RTT(t *testing.T, saveAppData bool) {
 	mockCtrl := gomock.NewController(t)
 	defer mockCtrl.Finish()
 
@@ -1071,6 +1085,11 @@ func testResumption0RTT(t *testing.T) {
 	clientConfig := testConfig.Clone()
 	clientConfig.ClientSessionCache = cache
 	clientExtraConfig := &ExtraConfig{Enable0RTT: true}
+	var restoredAppData []byte
+	if saveAppData {
+		clientExtraConfig.GetAppDataForSessionState = func() []byte { return []byte("foobar") }
+		clientExtraConfig.SetAppDataFromSessionState = func(data []byte) { restoredAppData = data }
+	}
 
 	// check that the ticket is deleted when 0-RTT is used
 	var state *ClientSessionState
@@ -1121,6 +1140,9 @@ func testResumption0RTT(t *testing.T) {
 	}
 	if hs.Used0RTT {
 		t.Fatal("should not have used 0-RTT during the second handshake")
+	}
+	if saveAppData && !bytes.Equal(restoredAppData, []byte("foobar")) {
+		t.Fatalf("expected app data to be restored. Got: %#v", restoredAppData)
 	}
 }
 
