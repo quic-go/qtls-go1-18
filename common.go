@@ -782,19 +782,30 @@ type ExtraConfig struct {
 	//
 	// It has no meaning to the server.
 	Enable0RTT bool
+
+	// Is called when the client saves a session ticket to the session ticket.
+	// This gives the application the opportunity to save some data along with the ticket,
+	// which can be restored when the session ticket is used.
+	GetAppDataForSessionState func() []byte
+
+	// Is called when the client uses a session ticket.
+	// Restores the application data that was saved earlier on GetAppDataForSessionTicket.
+	SetAppDataFromSessionState func([]byte)
 }
 
 // Clone clones.
 func (c *ExtraConfig) Clone() *ExtraConfig {
 	return &ExtraConfig{
-		GetExtensions:             c.GetExtensions,
-		ReceivedExtensions:        c.ReceivedExtensions,
-		AlternativeRecordLayer:    c.AlternativeRecordLayer,
-		EnforceNextProtoSelection: c.EnforceNextProtoSelection,
-		MaxEarlyData:              c.MaxEarlyData,
-		Enable0RTT:                c.Enable0RTT,
-		Accept0RTT:                c.Accept0RTT,
-		Rejected0RTT:              c.Rejected0RTT,
+		GetExtensions:              c.GetExtensions,
+		ReceivedExtensions:         c.ReceivedExtensions,
+		AlternativeRecordLayer:     c.AlternativeRecordLayer,
+		EnforceNextProtoSelection:  c.EnforceNextProtoSelection,
+		MaxEarlyData:               c.MaxEarlyData,
+		Enable0RTT:                 c.Enable0RTT,
+		Accept0RTT:                 c.Accept0RTT,
+		Rejected0RTT:               c.Rejected0RTT,
+		GetAppDataForSessionState:  c.GetAppDataForSessionState,
+		SetAppDataFromSessionState: c.SetAppDataFromSessionState,
 	}
 }
 
