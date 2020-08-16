@@ -139,14 +139,15 @@ func (c *Conn) readClientHello(ctx context.Context) (*clientHelloMsg, error) {
 		return nil, unexpectedMessageError(clientHello, msg)
 	}
 
-	var configForClient *Config
+	var configForClient *config
 	originalConfig := c.config
 	if c.config.GetConfigForClient != nil {
-		chi := clientHelloInfo(ctx, c, clientHello)
-		if configForClient, err = c.config.GetConfigForClient(chi); err != nil {
+		chi := newClientHelloInfo(ctx, c, clientHello)
+		if cfc, err := c.config.GetConfigForClient(chi); err != nil {
 			c.sendAlert(alertInternalError)
 			return nil, err
-		} else if configForClient != nil {
+		} else if cfc != nil {
+			configForClient = fromConfig(cfc)
 			c.config = configForClient
 		}
 	}
@@ -225,7 +226,7 @@ func (hs *serverHandshakeState) processClientHello() error {
 	hs.hello.alpnProtocol = selectedProto
 	c.clientProtocol = selectedProto
 
-	hs.cert, err = c.config.getCertificate(clientHelloInfo(hs.ctx, c, hs.clientHello))
+	hs.cert, err = c.config.getCertificate(newClientHelloInfo(hs.ctx, c, hs.clientHello))
 	if err != nil {
 		if err == errNoCertificates {
 			c.sendAlert(alertUnrecognizedName)
@@ -305,7 +306,7 @@ func negotiateALPN(serverProtos, clientProtos []string) (string, error) {
 
 // supportsECDHE returns whether ECDHE key exchanges can be used with this
 // pre-TLS 1.3 client.
-func supportsECDHE(c *Config, supportedCurves []CurveID, supportedPoints []uint8) bool {
+func supportsECDHE(c *config, supportedCurves []CurveID, supportedPoints []uint8) bool {
 	supportsCurve := false
 	for _, curve := range supportedCurves {
 		if c.supportsCurve(curve) {
@@ -854,13 +855,13 @@ func (c *Conn) processCertsFromClient(certificate Certificate) error {
 	return nil
 }
 
-func clientHelloInfo(ctx context.Context, c *Conn, clientHello *clientHelloMsg) *ClientHelloInfo {
+func newClientHelloInfo(ctx context.Context, c *Conn, clientHello *clientHelloMsg) *ClientHelloInfo {
 	supportedVersions := clientHello.supportedVersions
 	if len(clientHello.supportedVersions) == 0 {
 		supportedVersions = supportedVersionsFromMax(clientHello.vers)
 	}
 
-	return &ClientHelloInfo{
+	return toClientHelloInfo(&clientHelloInfo{
 		CipherSuites:      clientHello.cipherSuites,
 		ServerName:        clientHello.serverName,
 		SupportedCurves:   clientHello.supportedCurves,
@@ -869,7 +870,7 @@ func clientHelloInfo(ctx context.Context, c *Conn, clientHello *clientHelloMsg) 
 		SupportedProtos:   clientHello.alpnProtocols,
 		SupportedVersions: supportedVersions,
 		Conn:              c.conn,
-		config:            c.config,
+		config:            toConfig(c.config),
 		ctx:               ctx,
-	}
+	})
 }
