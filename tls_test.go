@@ -833,8 +833,9 @@ func TestCloneNonFuncFields(t *testing.T) {
 		}
 	}
 	// Set the unexported fields related to session ticket keys, which are copied with Clone().
-	c1.autoSessionTicketKeys = []ticketKey{c1.ticketKeyFromBytes(c1.SessionTicketKey)}
-	c1.sessionTicketKeys = []ticketKey{c1.ticketKeyFromBytes(c1.SessionTicketKey)}
+	conf1 := fromConfig(&c1)
+	conf1.autoSessionTicketKeys = []ticketKey{conf1.ticketKeyFromBytes(conf1.SessionTicketKey)}
+	conf1.sessionTicketKeys = []ticketKey{conf1.ticketKeyFromBytes(conf1.SessionTicketKey)}
 
 	c2 := c1.Clone()
 	if !reflect.DeepEqual(&c1, c2) {
@@ -1244,14 +1245,14 @@ func TestClientHelloInfo_SupportsCertificate(t *testing.T) {
 			SignatureSchemes:  []SignatureScheme{PKCS1WithSHA1},
 			SupportedVersions: []uint16{VersionTLS13, VersionTLS12},
 		}, "signature algorithms"},
-		{rsaCert, &ClientHelloInfo{
+		{rsaCert, toClientHelloInfo(&clientHelloInfo{
 			CipherSuites:      []uint16{TLS_RSA_WITH_AES_128_GCM_SHA256},
 			SignatureSchemes:  []SignatureScheme{PKCS1WithSHA1},
 			SupportedVersions: []uint16{VersionTLS13, VersionTLS12},
 			config: &Config{
 				MaxVersion: VersionTLS12,
 			},
-		}, ""}, // Check that mutual version selection works.
+		}), ""}, // Check that mutual version selection works.
 
 		{ecdsaCert, &ClientHelloInfo{
 			CipherSuites:      []uint16{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
@@ -1281,7 +1282,7 @@ func TestClientHelloInfo_SupportsCertificate(t *testing.T) {
 			SignatureSchemes:  []SignatureScheme{ECDSAWithP256AndSHA256},
 			SupportedVersions: []uint16{VersionTLS12},
 		}, "cipher suite"},
-		{ecdsaCert, &ClientHelloInfo{
+		{ecdsaCert, toClientHelloInfo(&clientHelloInfo{
 			CipherSuites:      []uint16{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
 			SupportedCurves:   []CurveID{CurveP256},
 			SupportedPoints:   []uint8{pointFormatUncompressed},
@@ -1290,7 +1291,7 @@ func TestClientHelloInfo_SupportsCertificate(t *testing.T) {
 			config: &Config{
 				CipherSuites: []uint16{TLS_RSA_WITH_AES_128_GCM_SHA256},
 			},
-		}, "cipher suite"},
+		}), "cipher suite"},
 		{ecdsaCert, &ClientHelloInfo{
 			CipherSuites:      []uint16{TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256},
 			SupportedCurves:   []CurveID{CurveP384},
