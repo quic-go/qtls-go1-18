@@ -419,7 +419,9 @@ func (c *ClientHelloInfo) Context() context.Context {
 // CertificateRequestInfo contains information from a server's
 // CertificateRequest message, which is used to demand a certificate and proof
 // of control from a client.
-type CertificateRequestInfo struct {
+type CertificateRequestInfo = tls.CertificateRequestInfo
+
+type certificateRequestInfo struct {
 	// AcceptableCAs contains zero or more, DER-encoded, X.501
 	// Distinguished Names. These are the names of root or intermediate CAs
 	// that the server wishes the returned certificate to be signed by. An
@@ -440,7 +442,7 @@ type CertificateRequestInfo struct {
 // Context returns the context of the handshake that is in progress.
 // This context is a child of the context passed to HandshakeContext,
 // if any, and is canceled when the handshake concludes.
-func (c *CertificateRequestInfo) Context() context.Context {
+func (c *certificateRequestInfo) Context() context.Context {
 	return c.ctx
 }
 
@@ -1223,38 +1225,6 @@ func (chi *ClientHelloInfo) SupportsCertificate(c *Certificate) error {
 	}
 
 	return nil
-}
-
-// SupportsCertificate returns nil if the provided certificate is supported by
-// the server that sent the CertificateRequest. Otherwise, it returns an error
-// describing the reason for the incompatibility.
-func (cri *CertificateRequestInfo) SupportsCertificate(c *Certificate) error {
-	if _, err := selectSignatureScheme(cri.Version, c, cri.SignatureSchemes); err != nil {
-		return err
-	}
-
-	if len(cri.AcceptableCAs) == 0 {
-		return nil
-	}
-
-	for j, cert := range c.Certificate {
-		x509Cert := c.Leaf
-		// Parse the certificate if this isn't the leaf node, or if
-		// chain.Leaf was nil.
-		if j != 0 || x509Cert == nil {
-			var err error
-			if x509Cert, err = x509.ParseCertificate(cert); err != nil {
-				return fmt.Errorf("failed to parse certificate #%d in the chain: %w", j, err)
-			}
-		}
-
-		for _, ca := range cri.AcceptableCAs {
-			if bytes.Equal(x509Cert.RawIssuer, ca) {
-				return nil
-			}
-		}
-	}
-	return errors.New("chain is not signed by an acceptable CA")
 }
 
 // BuildNameToCertificate parses c.Certificates and builds c.NameToCertificate
