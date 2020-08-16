@@ -40,7 +40,7 @@ type Conn struct {
 	handshakeErr   error   // error resulting from handshake
 	vers           uint16  // TLS version
 	haveVers       bool    // version has been negotiated
-	config         *Config // configuration passed to constructor
+	config         *config // configuration passed to constructor
 	// handshakes counts the number of handshakes performed on the
 	// connection so far. If renegotiation is disabled then this is either
 	// zero or one.
