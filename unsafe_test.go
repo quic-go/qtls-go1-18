@@ -5,7 +5,9 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
+	"time"
 )
 
 func TestUnsafeConversionIsSafe(t *testing.T) {
@@ -140,5 +142,18 @@ func TestConnectionStateReinterpretCast(t *testing.T) {
 	}
 	if ekmLength != 42 {
 		t.Error("key export length doesn't match")
+	}
+}
+
+func TestClientSessionStateReinterpretCast(t *testing.T) {
+	state := &clientSessionState{
+		sessionTicket: []byte("foobar"),
+		receivedAt:    time.Now(),
+		nonce:         []byte("foo"),
+		useBy:         time.Now().Add(time.Hour),
+		ageAdd:        1234,
+	}
+	if !reflect.DeepEqual(fromClientSessionState(toClientSessionState(state)), state) {
+		t.Fatal("failed")
 	}
 }

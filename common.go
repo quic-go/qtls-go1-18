@@ -301,7 +301,9 @@ func requiresClientCert(c ClientAuthType) bool {
 
 // ClientSessionState contains the state needed by clients to resume TLS
 // sessions.
-type ClientSessionState struct {
+type ClientSessionState = tls.ClientSessionState
+
+type clientSessionState struct {
 	sessionTicket      []uint8               // Encrypted ticket used for session resumption with server
 	vers               uint16                // TLS version negotiated for the session
 	cipherSuite        uint16                // Ciphersuite negotiated for the session
@@ -324,17 +326,7 @@ type ClientSessionState struct {
 // goroutines. Up to TLS 1.2, only ticket-based resumption is supported, not
 // SessionID-based resumption. In TLS 1.3 they were merged into PSK modes, which
 // are supported via this interface.
-type ClientSessionCache interface {
-	// Get searches for a ClientSessionState associated with the given key.
-	// On return, ok is true if one was found.
-	Get(sessionKey string) (session *ClientSessionState, ok bool)
-
-	// Put adds the ClientSessionState to the cache with the given key. It might
-	// get called multiple times in a connection if a TLS 1.3 server provides
-	// more than one session ticket. If called with a nil *ClientSessionState,
-	// it should remove the cache entry.
-	Put(sessionKey string, cs *ClientSessionState)
-}
+type ClientSessionCache = tls.ClientSessionCache
 
 // SignatureScheme is a tls.SignatureScheme
 type SignatureScheme = tls.SignatureScheme
