@@ -10,10 +10,21 @@ func init() {
 	if !structsEqual(&tls.ConnectionState{}, &connectionState{}) {
 		panic("qtls.ConnectionState doesn't match")
 	}
+	if !structsEqual(&tls.ClientSessionState{}, &clientSessionState{}) {
+		panic("qtls.ClientSessionState doesn't match")
+	}
 }
 
 func toConnectionState(c connectionState) ConnectionState {
 	return *(*ConnectionState)(unsafe.Pointer(&c))
+}
+
+func toClientSessionState(s *clientSessionState) *ClientSessionState {
+	return (*ClientSessionState)(unsafe.Pointer(s))
+}
+
+func fromClientSessionState(s *ClientSessionState) *clientSessionState {
+	return (*clientSessionState)(unsafe.Pointer(s))
 }
 
 func structsEqual(a, b interface{}) bool {
