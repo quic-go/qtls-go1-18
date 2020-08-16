@@ -157,3 +157,16 @@ func TestClientSessionStateReinterpretCast(t *testing.T) {
 		t.Fatal("failed")
 	}
 }
+
+// func TestClientSessionStateReinterpretCast(t *testing.T) {
+// 	state := &clientSessionState{
+// 		sessionTicket: []byte("foobar"),
+// 		receivedAt:    time.Now(),
+// 		nonce:         []byte("foo"),
+// 		useBy:         time.Now().Add(time.Hour),
+// 		ageAdd:        1234,
+// 	}
+// 	if !reflect.DeepEqual(fromClientSessionState(toClientSessionState(state)), state) {
+// 		t.Fatal("failed")
+// 	}
+// }
