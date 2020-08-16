@@ -208,8 +208,10 @@ const (
 // include downgrade canaries even if it's using its highers supported version.
 var testingOnlyForceDowngradeCanary bool
 
+type ConnectionState = tls.ConnectionState
+
 // ConnectionState records basic TLS details about the connection.
-type ConnectionState struct {
+type connectionState struct {
 	// Version is the TLS version used by the connection (e.g. VersionTLS12).
 	Version uint16
 
@@ -273,14 +275,6 @@ type ConnectionState struct {
 
 	// ekm is a closure exposed via ExportKeyingMaterial.
 	ekm func(label string, context []byte, length int) ([]byte, error)
-}
-
-// ExportKeyingMaterial returns length bytes of exported key material in a new
-// slice as defined in RFC 5705. If context is nil, it is not used as part of
-// the seed. If the connection was set to allow renegotiation via
-// Config.Renegotiation, this function will return an error.
-func (cs *ConnectionState) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
-	return cs.ekm(label, context, length)
 }
 
 // ClientAuthType is tls.ClientAuthType
