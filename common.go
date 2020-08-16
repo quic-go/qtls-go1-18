@@ -472,19 +472,19 @@ func (c *CertificateRequestInfo) Context() context.Context {
 // HTTPS.
 //
 // Renegotiation is not defined in TLS 1.3.
-type RenegotiationSupport int
+type RenegotiationSupport = tls.RenegotiationSupport
 
 const (
 	// RenegotiateNever disables renegotiation.
-	RenegotiateNever RenegotiationSupport = iota
+	RenegotiateNever = tls.RenegotiateNever
 
 	// RenegotiateOnceAsClient allows a remote server to request
 	// renegotiation once per connection.
-	RenegotiateOnceAsClient
+	RenegotiateOnceAsClient = tls.RenegotiateOnceAsClient
 
 	// RenegotiateFreelyAsClient allows a remote server to repeatedly
 	// request renegotiation.
-	RenegotiateFreelyAsClient
+	RenegotiateFreelyAsClient = tls.RenegotiateFreelyAsClient
 )
 
 // A Config structure is used to configure a TLS client or server.
