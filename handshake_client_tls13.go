@@ -23,7 +23,7 @@ type clientHandshakeStateTLS13 struct {
 	hello       *clientHelloMsg
 	ecdheParams ecdheParameters
 
-	session     *ClientSessionState
+	session     *clientSessionState
 	earlySecret []byte
 	binderKey   []byte
 
@@ -660,7 +660,7 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 	// to do the least amount of work on NewSessionTicket messages before we
 	// know if the ticket will be used. Forward secrecy of resumed connections
 	// is guaranteed by the requirement for pskModeDHE.
-	session := &ClientSessionState{
+	session := &clientSessionState{
 		sessionTicket:      msg.label,
 		vers:               c.vers,
 		cipherSuite:        c.cipherSuite,
@@ -676,7 +676,7 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 	}
 
 	cacheKey := clientSessionCacheKey(c.conn.RemoteAddr(), c.config)
-	c.config.ClientSessionCache.Put(cacheKey, session)
+	c.config.ClientSessionCache.Put(cacheKey, toClientSessionState(session))
 
 	return nil
 }
