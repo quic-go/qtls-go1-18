@@ -1107,7 +1107,7 @@ func (chi *ClientHelloInfo) SupportsCertificate(c *Certificate) error {
 	// If the client specified the name they are trying to connect to, the
 	// certificate needs to be valid for it.
 	if chi.ServerName != "" {
-		x509Cert, err := c.leaf()
+		x509Cert, err := leafCertificate(c)
 		if err != nil {
 			return fmt.Errorf("failed to parse certificate: %w", err)
 		}
@@ -1282,7 +1282,7 @@ func (c *Config) BuildNameToCertificate() {
 	c.NameToCertificate = make(map[string]*Certificate)
 	for i := range c.Certificates {
 		cert := &c.Certificates[i]
-		x509Cert, err := cert.leaf()
+		x509Cert, err := leafCertificate(cert)
 		if err != nil {
 			continue
 		}
@@ -1324,31 +1324,11 @@ func (c *Config) writeKeyLog(label string, clientRandom, secret []byte) error {
 var writerMutex sync.Mutex
 
 // A Certificate is a chain of one or more certificates, leaf first.
-type Certificate struct {
-	Certificate [][]byte
-	// PrivateKey contains the private key corresponding to the public key in
-	// Leaf. This must implement crypto.Signer with an RSA, ECDSA or Ed25519 PublicKey.
-	// For a server up to TLS 1.2, it can also implement crypto.Decrypter with
-	// an RSA PublicKey.
-	PrivateKey crypto.PrivateKey
-	// SupportedSignatureAlgorithms is an optional list restricting what
-	// signature algorithms the PrivateKey can be used for.
-	SupportedSignatureAlgorithms []SignatureScheme
-	// OCSPStaple contains an optional OCSP response which will be served
-	// to clients that request it.
-	OCSPStaple []byte
-	// SignedCertificateTimestamps contains an optional list of Signed
-	// Certificate Timestamps which will be served to clients that request it.
-	SignedCertificateTimestamps [][]byte
-	// Leaf is the parsed form of the leaf certificate, which may be initialized
-	// using x509.ParseCertificate to reduce per-handshake processing. If nil,
-	// the leaf certificate will be parsed as needed.
-	Leaf *x509.Certificate
-}
+type Certificate = tls.Certificate
 
 // leaf returns the parsed leaf certificate, either from c.Leaf or by parsing
 // the corresponding c.Certificate[0].
-func (c *Certificate) leaf() (*x509.Certificate, error) {
+func leafCertificate(c *Certificate) (*x509.Certificate, error) {
 	if c.Leaf != nil {
 		return c.Leaf, nil
 	}
