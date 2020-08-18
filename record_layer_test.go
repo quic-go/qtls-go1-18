@@ -262,3 +262,79 @@ func TestErrorOnOldTLSVersions(t *testing.T) {
 	cIn <- []byte{'f'}
 	<-done
 }
+
+func TestRejectConfigWithOldMaxVersion(t *testing.T) {
+	t.Run("for the client", func(t *testing.T) {
+		config := testConfig.Clone()
+		config.MaxVersion = VersionTLS12
+		tlsConn := Client(&unusedConn{}, config, &ExtraConfig{AlternativeRecordLayer: &recordLayer{}})
+		err := tlsConn.Handshake()
+		if err == nil || err.Error() != "tls: MaxVersion prevents QUIC from using TLS 1.3" {
+			t.Errorf("expected the handshake to fail")
+		}
+	})
+
+	t.Run("for the server", func(t *testing.T) {
+		in := make(chan []byte, 10)
+		out := make(chan []byte, 10)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			Client(
+				&unusedConn{},
+				testConfig,
+				&ExtraConfig{AlternativeRecordLayer: &recordLayer{in: in, out: out}},
+			).Handshake()
+		}()
+
+		config := testConfig.Clone()
+		config.MaxVersion = VersionTLS12
+		serverRecordLayer := &recordLayer{in: out, out: in}
+		err := Server(
+			&unusedConn{},
+			config,
+			&ExtraConfig{AlternativeRecordLayer: serverRecordLayer},
+		).Handshake()
+		if err == nil || err.Error() != "tls: MaxVersion prevents QUIC from using TLS 1.3" {
+			t.Errorf("expected the handshake to fail")
+		}
+		if serverRecordLayer.alertSent != alertInternalError {
+			t.Fatal("expected an internal error alert to be sent")
+		}
+	})
+
+	t.Run("for the server (using GetConfigForClient)", func(t *testing.T) {
+		in := make(chan []byte, 10)
+		out := make(chan []byte, 10)
+
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			Client(
+				&unusedConn{},
+				testConfig,
+				&ExtraConfig{AlternativeRecordLayer: &recordLayer{in: in, out: out}},
+			).Handshake()
+		}()
+
+		config := testConfig.Clone()
+		config.GetConfigForClient = func(*ClientHelloInfo) (*Config, error) {
+			conf := testConfig.Clone()
+			conf.MaxVersion = VersionTLS12
+			return conf, nil
+		}
+		serverRecordLayer := &recordLayer{in: out, out: in}
+		err := Server(
+			&unusedConn{},
+			config,
+			&ExtraConfig{AlternativeRecordLayer: serverRecordLayer},
+		).Handshake()
+		if err == nil || err.Error() != "tls: MaxVersion prevents QUIC from using TLS 1.3" {
+			t.Errorf("expected the handshake to fail")
+		}
+		if serverRecordLayer.alertSent != alertInternalError {
+			t.Fatal("expected an internal error alert to be sent")
+		}
+	})
+}
