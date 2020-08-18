@@ -756,6 +756,10 @@ func (c *ExtraConfig) Clone() *ExtraConfig {
 	}
 }
 
+func (c *ExtraConfig) usesAlternativeRecordLayer() bool {
+	return c != nil && c.AlternativeRecordLayer != nil
+}
+
 const (
 	// ticketKeyNameLen is the number of bytes of identifier that is prepended to
 	// an encrypted session ticket in order to identify the key used to encrypt it.

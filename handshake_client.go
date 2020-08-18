@@ -52,12 +52,20 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, ecdheParameters, error) {
 		return nil, nil, errors.New("tls: NextProtos values too large")
 	}
 
-	supportedVersions := config.supportedVersions(roleClient)
-	if len(supportedVersions) == 0 {
-		return nil, nil, errors.New("tls: no supported versions satisfy MinVersion and MaxVersion")
+	var supportedVersions []uint16
+	var clientHelloVersion uint16
+	if c.extraConfig.usesAlternativeRecordLayer() {
+		// Only offer TLS 1.3 when QUIC is used.
+		supportedVersions = []uint16{VersionTLS13}
+		clientHelloVersion = VersionTLS13
+	} else {
+		supportedVersions = config.supportedVersions(roleClient)
+		if len(supportedVersions) == 0 {
+			return nil, nil, errors.New("tls: no supported versions satisfy MinVersion and MaxVersion")
+		}
+		clientHelloVersion = config.maxSupportedVersion(roleClient)
 	}
 
-	clientHelloVersion := config.maxSupportedVersion(roleClient)
 	// The version at the beginning of the ClientHello was capped at TLS 1.2
 	// for compatibility reasons. The supported_versions extension is used
 	// to negotiate versions now. See RFC 8446, Section 4.2.1.
