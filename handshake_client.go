@@ -55,6 +55,9 @@ func (c *Conn) makeClientHello() (*clientHelloMsg, ecdheParameters, error) {
 	var supportedVersions []uint16
 	var clientHelloVersion uint16
 	if c.extraConfig.usesAlternativeRecordLayer() {
+		if config.maxSupportedVersion(roleClient) < VersionTLS13 {
+			return nil, nil, errors.New("tls: MaxVersion prevents QUIC from using TLS 1.3")
+		}
 		// Only offer TLS 1.3 when QUIC is used.
 		supportedVersions = []uint16{VersionTLS13}
 		clientHelloVersion = VersionTLS13
