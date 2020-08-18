@@ -7,6 +7,21 @@ import (
 	"time"
 )
 
+type recordLayer struct {
+	in  <-chan []byte
+	out chan<- []byte
+
+	alertSent alert
+}
+
+func (r *recordLayer) SetReadKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
+}
+func (r *recordLayer) SetWriteKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
+}
+func (r *recordLayer) ReadHandshakeMessage() ([]byte, error) { return <-r.in, nil }
+func (r *recordLayer) WriteRecord(b []byte) (int, error)     { r.out <- b; return len(b), nil }
+func (r *recordLayer) SendAlert(a uint8)                     { r.alertSent = alert(a) }
+
 type exportedKey struct {
 	typ           string // "read" or "write"
 	encLevel      EncryptionLevel
@@ -14,20 +29,20 @@ type exportedKey struct {
 	trafficSecret []byte
 }
 
-type recordLayer struct {
+type recordLayerWithKeys struct {
 	in  <-chan []byte
 	out chan<- interface{}
 }
 
-func (r *recordLayer) SetReadKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
+func (r *recordLayerWithKeys) SetReadKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
 	r.out <- &exportedKey{typ: "read", encLevel: encLevel, suite: suite, trafficSecret: trafficSecret}
 }
-func (r *recordLayer) SetWriteKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
+func (r *recordLayerWithKeys) SetWriteKey(encLevel EncryptionLevel, suite *CipherSuiteTLS13, trafficSecret []byte) {
 	r.out <- &exportedKey{typ: "write", encLevel: encLevel, suite: suite, trafficSecret: trafficSecret}
 }
-func (r *recordLayer) ReadHandshakeMessage() ([]byte, error) { return <-r.in, nil }
-func (r *recordLayer) WriteRecord(b []byte) (int, error)     { r.out <- b; return len(b), nil }
-func (r *recordLayer) SendAlert(uint8)                       {}
+func (r *recordLayerWithKeys) ReadHandshakeMessage() ([]byte, error) { return <-r.in, nil }
+func (r *recordLayerWithKeys) WriteRecord(b []byte) (int, error)     { r.out <- b; return len(b), nil }
+func (r *recordLayerWithKeys) SendAlert(uint8)                       {}
 
 type unusedConn struct{}
 
@@ -81,7 +96,7 @@ func TestAlternativeRecordLayer(t *testing.T) {
 	errChan := make(chan error)
 	go func() {
 		extraConf := &ExtraConfig{
-			AlternativeRecordLayer: &recordLayer{in: sIn, out: sOut},
+			AlternativeRecordLayer: &recordLayerWithKeys{in: sIn, out: sOut},
 		}
 		tlsConn := Server(&unusedConn{}, testConfig, extraConf)
 		defer tlsConn.Close()
@@ -89,7 +104,7 @@ func TestAlternativeRecordLayer(t *testing.T) {
 	}()
 
 	extraConf := &ExtraConfig{
-		AlternativeRecordLayer: &recordLayer{in: cIn, out: cOut},
+		AlternativeRecordLayer: &recordLayerWithKeys{in: cIn, out: cOut},
 	}
 	tlsConn := Client(&unusedConn{}, testConfig, extraConf)
 	defer tlsConn.Close()
@@ -199,4 +214,51 @@ func TestAlternativeRecordLayer(t *testing.T) {
 	if len(serverEvents) > 0 {
 		t.Fatal("didn't expect any more server events")
 	}
+}
+
+func TestErrorOnOldTLSVersions(t *testing.T) {
+	sIn := make(chan []byte, 10)
+	cIn := make(chan []byte, 10)
+	cOut := make(chan []byte, 10)
+
+	go func() {
+		for {
+			b, ok := <-cOut
+			if !ok {
+				return
+			}
+			if b[0] == typeClientHello {
+				m := new(clientHelloMsg)
+				if !m.unmarshal(b) {
+					panic("unmarshal failed")
+				}
+				m.raw = nil // need to reset, so marshal() actually marshals the changes
+				m.supportedVersions = []uint16{VersionTLS11, VersionTLS13}
+				b = m.marshal()
+			}
+			sIn <- b
+		}
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		extraConf := &ExtraConfig{AlternativeRecordLayer: &recordLayer{in: cIn, out: cOut}}
+		Client(&unusedConn{}, testConfig, extraConf).Handshake()
+	}()
+
+	serverRecordLayer := &recordLayer{in: sIn, out: cIn}
+	extraConf := &ExtraConfig{AlternativeRecordLayer: serverRecordLayer}
+	tlsConn := Server(&unusedConn{}, testConfig, extraConf)
+	defer tlsConn.Close()
+	err := tlsConn.Handshake()
+	if err == nil || err.Error() != "tls: client offered old TLS version 0x302" {
+		t.Fatal("expected the server to error when the client offers old versions")
+	}
+	if serverRecordLayer.alertSent != alertProtocolVersion {
+		t.Fatal("expected a protocol version alert to be sent")
+	}
+
+	cIn <- []byte{'f'}
+	<-done
 }
