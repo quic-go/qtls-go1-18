@@ -54,6 +54,12 @@ func (c *Conn) serverHandshake(ctx context.Context) error {
 			clientHello: clientHello,
 		}
 		return hs.handshake()
+	} else if c.extraConfig.usesAlternativeRecordLayer() {
+		// This should already have been caught by the check that the ClientHello doesn't
+		// offer any (supported) versions older than TLS 1.3.
+		// Check again to make sure we can't be tricked into using an older version.
+		c.sendAlert(alertProtocolVersion)
+		return errors.New("tls: negotiated TLS < 1.3 when using QUIC")
 	}
 
 	hs := serverHandshakeState{
@@ -158,6 +164,22 @@ func (c *Conn) readClientHello(ctx context.Context) (*clientHelloMsg, error) {
 	clientVersions := clientHello.supportedVersions
 	if len(clientHello.supportedVersions) == 0 {
 		clientVersions = supportedVersionsFromMax(clientHello.vers)
+	}
+	// In QUIC, the client MUST NOT offer any old TLS versions.
+	// Here, we can only check that none of the other supported versions of this library
+	// (TLS 1.0 - TLS 1.2) is offered. We don't check for any SSL versions here.
+	if c.extraConfig.usesAlternativeRecordLayer() {
+		for _, ver := range clientVersions {
+			if ver == VersionTLS13 {
+				continue
+			}
+			for _, v := range supportedVersions {
+				if ver == v {
+					c.sendAlert(alertProtocolVersion)
+					return nil, fmt.Errorf("tls: client offered old TLS version %#x", ver)
+				}
+			}
+		}
 	}
 	c.vers, ok = c.config.mutualVersion(roleServer, clientVersions)
 	if !ok {
