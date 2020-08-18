@@ -165,10 +165,10 @@ func (c *Conn) readClientHello(ctx context.Context) (*clientHelloMsg, error) {
 	if len(clientHello.supportedVersions) == 0 {
 		clientVersions = supportedVersionsFromMax(clientHello.vers)
 	}
-	// In QUIC, the client MUST NOT offer any old TLS versions.
-	// Here, we can only check that none of the other supported versions of this library
-	// (TLS 1.0 - TLS 1.2) is offered. We don't check for any SSL versions here.
 	if c.extraConfig.usesAlternativeRecordLayer() {
+		// In QUIC, the client MUST NOT offer any old TLS versions.
+		// Here, we can only check that none of the other supported versions of this library
+		// (TLS 1.0 - TLS 1.2) is offered. We don't check for any SSL versions here.
 		for _, ver := range clientVersions {
 			if ver == VersionTLS13 {
 				continue
@@ -179,6 +179,11 @@ func (c *Conn) readClientHello(ctx context.Context) (*clientHelloMsg, error) {
 					return nil, fmt.Errorf("tls: client offered old TLS version %#x", ver)
 				}
 			}
+		}
+		// Make the config we're using allows us to use TLS 1.3.
+		if c.config.maxSupportedVersion(roleServer) < VersionTLS13 {
+			c.sendAlert(alertInternalError)
+			return nil, errors.New("tls: MaxVersion prevents QUIC from using TLS 1.3")
 		}
 	}
 	c.vers, ok = c.config.mutualVersion(roleServer, clientVersions)
