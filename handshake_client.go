@@ -1079,13 +1079,15 @@ func (c *Conn) getClientCertificate(cri *CertificateRequestInfo) (*Certificate, 
 	return new(Certificate), nil
 }
 
+const clientSessionCacheKeyPrefix = "qtls-"
+
 // clientSessionCacheKey returns a key used to cache sessionTickets that could
 // be used to resume previously negotiated TLS sessions with a server.
 func clientSessionCacheKey(serverAddr net.Addr, config *config) string {
 	if len(config.ServerName) > 0 {
-		return config.ServerName
+		return clientSessionCacheKeyPrefix + config.ServerName
 	}
-	return serverAddr.String()
+	return clientSessionCacheKeyPrefix + serverAddr.String()
 }
 
 // hostnameInSNI converts name into an appropriate hostname for SNI.
