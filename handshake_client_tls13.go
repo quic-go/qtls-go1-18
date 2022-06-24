@@ -10,7 +10,6 @@ import (
 	"crypto"
 	"crypto/hmac"
 	"crypto/rsa"
-	"encoding/binary"
 	"errors"
 	"hash"
 	"sync/atomic"
@@ -688,10 +687,6 @@ func (c *Conn) handleNewSessionTicket(msg *newSessionTicketMsgTLS13) error {
 	// However, at the same time, the qtls.ClientSessionTicket needs to be equal to
 	// the tls.ClientSessionTicket, so we can't just add a new field to the struct.
 	// We therefore abuse the nonce field (which is a byte slice)
-	nonceWithEarlyData := make([]byte, len(msg.nonce)+4)
-	binary.BigEndian.PutUint32(nonceWithEarlyData, msg.maxEarlyData)
-	copy(nonceWithEarlyData[4:], msg.nonce)
-
 	var appData []byte
 	if c.extraConfig != nil && c.extraConfig.GetAppDataForSessionState != nil {
 		appData = c.extraConfig.GetAppDataForSessionState()
