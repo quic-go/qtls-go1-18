@@ -444,6 +444,7 @@ func (c *Conn) loadSession(hello *clientHelloMsg) (cacheKey string,
 		hello.earlyData = c.extraConfig.Enable0RTT && maxEarlyData > 0
 	}
 	transcript := cipherSuite.hash.New()
+	fmt.Printf("hello: %#v\n", hello)
 	transcript.Write(hello.marshalWithoutBinders())
 	pskBinders := [][]byte{cipherSuite.finishedHash(binderKey, transcript)}
 	hello.updateBinders(pskBinders)
