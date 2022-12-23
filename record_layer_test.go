@@ -74,148 +74,183 @@ func TestAlternativeRecordLayer(t *testing.T) {
 	cOut := make(chan interface{}, 10)
 	defer close(cOut)
 
-	serverEvents := make(chan interface{}, 100)
+	testConfig := testConfig.Clone()
+	testConfig.NextProtos = []string{"alpn"}
+
+	// server side
+	errChan := make(chan error)
+	serverConn := Server(
+		&unusedConn{},
+		testConfig,
+		&ExtraConfig{AlternativeRecordLayer: &recordLayerWithKeys{in: sIn, out: sOut}},
+	)
 	go func() {
+		defer serverConn.Close()
+		err := serverConn.Handshake()
+		connState := serverConn.ConnectionState()
+		if !connState.HandshakeComplete {
+			t.Fatal("expected the handshake to have completed")
+		}
+		errChan <- err
+	}()
+	serverKeyChan := make(chan *exportedKey, 4) // see server loop for the order in which keys are provided
+	go func() {
+		var counter int
 		for {
 			c, ok := <-sOut
 			if !ok {
 				return
 			}
-			serverEvents <- c
+			switch counter {
+			case 0:
+				if c.([]byte)[0] != typeServerHello {
+					t.Errorf("expected ServerHello")
+				}
+				connState := serverConn.ConnectionState()
+				if connState.HandshakeComplete {
+					t.Error("didn't expect the handshake to be complete yet")
+				}
+				if connState.Version != VersionTLS13 {
+					t.Errorf("expected TLS 1.3, got %x", connState.Version)
+				}
+				if connState.NegotiatedProtocol == "" {
+					t.Error("expected ALPN to be negotiated")
+				}
+			case 1:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "read" || keyEv.encLevel != EncryptionHandshake {
+					t.Errorf("expected the handshake read key")
+				}
+				serverKeyChan <- keyEv
+			case 2:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "write" || keyEv.encLevel != EncryptionHandshake {
+					t.Errorf("expected the handshake write key")
+				}
+				serverKeyChan <- keyEv
+			case 3:
+				if c.([]byte)[0] != typeEncryptedExtensions {
+					t.Errorf("expected EncryptedExtensions")
+				}
+			case 4:
+				if c.([]byte)[0] != typeCertificate {
+					t.Errorf("expected Certificate")
+				}
+			case 5:
+				if c.([]byte)[0] != typeCertificateVerify {
+					t.Errorf("expected CertificateVerify")
+				}
+			case 6:
+				if c.([]byte)[0] != typeFinished {
+					t.Errorf("expected Finished")
+				}
+			case 7:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "write" || keyEv.encLevel != EncryptionApplication {
+					t.Errorf("expected the application write key")
+				}
+				serverKeyChan <- keyEv
+			case 8:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "read" || keyEv.encLevel != EncryptionApplication {
+					t.Errorf("expected the application read key")
+				}
+				serverKeyChan <- keyEv
+			default:
+				t.Error("didn't expect any more events")
+			}
+			counter++
 			if b, ok := c.([]byte); ok {
 				cIn <- b
 			}
 		}
 	}()
 
-	clientEvents := make(chan interface{}, 100)
+	// client side
+	clientConn := Client(
+		&unusedConn{},
+		testConfig,
+		&ExtraConfig{AlternativeRecordLayer: &recordLayerWithKeys{in: cIn, out: cOut}},
+	)
+	defer clientConn.Close()
 	go func() {
+		var counter int
 		for {
 			c, ok := <-cOut
 			if !ok {
 				return
 			}
-			clientEvents <- c
+			switch counter {
+			case 0:
+				if c.([]byte)[0] != typeClientHello {
+					t.Errorf("expected ClientHello")
+				}
+				connState := clientConn.ConnectionState()
+				if connState.HandshakeComplete {
+					t.Error("didn't expect the handshake to be complete yet")
+				}
+				if len(connState.PeerCertificates) != 0 {
+					t.Error("didn't expect a certificate yet")
+				}
+			case 1:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "write" || keyEv.encLevel != EncryptionHandshake {
+					t.Errorf("expected the handshake write key")
+				}
+				compareExportedKeys(t, <-serverKeyChan, keyEv)
+			case 2:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "read" || keyEv.encLevel != EncryptionHandshake {
+					t.Errorf("expected the handshake read key")
+				}
+				compareExportedKeys(t, <-serverKeyChan, keyEv)
+			case 3:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "read" || keyEv.encLevel != EncryptionApplication {
+					t.Errorf("expected the application read key")
+				}
+				compareExportedKeys(t, <-serverKeyChan, keyEv)
+			case 4:
+				if c.([]byte)[0] != typeFinished {
+					t.Errorf("expected Finished")
+				}
+			case 5:
+				keyEv := c.(*exportedKey)
+				if keyEv.typ != "write" || keyEv.encLevel != EncryptionApplication {
+					t.Errorf("expected the application write key")
+				}
+				compareExportedKeys(t, <-serverKeyChan, keyEv)
+			default:
+				t.Error("didn't expect any more events")
+			}
+			counter++
 			if b, ok := c.([]byte); ok {
 				sIn <- b
 			}
 		}
 	}()
 
-	errChan := make(chan error)
-	go func() {
-		extraConf := &ExtraConfig{
-			AlternativeRecordLayer: &recordLayerWithKeys{in: sIn, out: sOut},
-		}
-		tlsConn := Server(&unusedConn{}, testConfig, extraConf)
-		defer tlsConn.Close()
-		errChan <- tlsConn.Handshake()
-	}()
-
-	extraConf := &ExtraConfig{
-		AlternativeRecordLayer: &recordLayerWithKeys{in: cIn, out: cOut},
-	}
-	tlsConn := Client(&unusedConn{}, testConfig, extraConf)
-	defer tlsConn.Close()
-	if err := tlsConn.Handshake(); err != nil {
+	if err := clientConn.Handshake(); err != nil {
 		t.Fatalf("Handshake failed: %s", err)
 	}
-
-	// Handshakes completed. Now check that events were received in the correct order.
-	var clientHandshakeReadKey, clientHandshakeWriteKey *exportedKey
-	var clientApplicationReadKey, clientApplicationWriteKey *exportedKey
-	for i := 0; i <= 5; i++ {
-		ev := <-clientEvents
-		switch i {
-		case 0:
-			if ev.([]byte)[0] != typeClientHello {
-				t.Fatalf("expected ClientHello")
-			}
-		case 1:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "write" || keyEv.encLevel != EncryptionHandshake {
-				t.Fatalf("expected the handshake write key")
-			}
-			clientHandshakeWriteKey = keyEv
-		case 2:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "read" || keyEv.encLevel != EncryptionHandshake {
-				t.Fatalf("expected the handshake read key")
-			}
-			clientHandshakeReadKey = keyEv
-		case 3:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "read" || keyEv.encLevel != EncryptionApplication {
-				t.Fatalf("expected the application read key")
-			}
-			clientApplicationReadKey = keyEv
-		case 4:
-			if ev.([]byte)[0] != typeFinished {
-				t.Fatalf("expected Finished")
-			}
-		case 5:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "write" || keyEv.encLevel != EncryptionApplication {
-				t.Fatalf("expected the application write key")
-			}
-			clientApplicationWriteKey = keyEv
-		}
+	connState := clientConn.ConnectionState()
+	if !connState.HandshakeComplete {
+		t.Fatal("expected the handshake to have completed")
 	}
-	if len(clientEvents) > 0 {
-		t.Fatal("didn't expect any more client events")
+	if connState.Version != VersionTLS13 {
+		t.Errorf("expected TLS 1.3, got %x", connState.Version)
+	}
+	if len(connState.PeerCertificates) == 0 {
+		t.Fatal("expected the certificate to be set")
 	}
 
-	for i := 0; i <= 8; i++ {
-		ev := <-serverEvents
-		switch i {
-		case 0:
-			if ev.([]byte)[0] != typeServerHello {
-				t.Fatalf("expected ServerHello")
-			}
-		case 1:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "read" || keyEv.encLevel != EncryptionHandshake {
-				t.Fatalf("expected the handshake read key")
-			}
-			compareExportedKeys(t, clientHandshakeWriteKey, keyEv)
-		case 2:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "write" || keyEv.encLevel != EncryptionHandshake {
-				t.Fatalf("expected the handshake write key")
-			}
-			compareExportedKeys(t, clientHandshakeReadKey, keyEv)
-		case 3:
-			if ev.([]byte)[0] != typeEncryptedExtensions {
-				t.Fatalf("expected EncryptedExtensions")
-			}
-		case 4:
-			if ev.([]byte)[0] != typeCertificate {
-				t.Fatalf("expected Certificate")
-			}
-		case 5:
-			if ev.([]byte)[0] != typeCertificateVerify {
-				t.Fatalf("expected CertificateVerify")
-			}
-		case 6:
-			if ev.([]byte)[0] != typeFinished {
-				t.Fatalf("expected Finished")
-			}
-		case 7:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "write" || keyEv.encLevel != EncryptionApplication {
-				t.Fatalf("expected the application write key")
-			}
-			compareExportedKeys(t, clientApplicationReadKey, keyEv)
-		case 8:
-			keyEv := ev.(*exportedKey)
-			if keyEv.typ != "read" || keyEv.encLevel != EncryptionApplication {
-				t.Fatalf("expected the application read key")
-			}
-			compareExportedKeys(t, clientApplicationWriteKey, keyEv)
+	select {
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("server timed out")
+	case err := <-errChan:
+		if err != nil {
+			t.Fatalf("server handshake failed: %s", err)
 		}
-	}
-	if len(serverEvents) > 0 {
-		t.Fatal("didn't expect any more server events")
 	}
 }
 

@@ -1572,6 +1572,7 @@ func TestSNIGivenOnFailure(t *testing.T) {
 		t.Error("No error reported from server")
 	}
 
+	hs.c.updateConnectionState()
 	cs := hs.c.ConnectionState()
 	if cs.HandshakeComplete {
 		t.Error("Handshake registered as complete")
